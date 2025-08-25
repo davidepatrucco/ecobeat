@@ -1,0 +1,24 @@
+workspaces:
+  - 'apps/*'
+  - 'packages/*'
+
+# Enable hoisting for better performance
+hoist-pattern:
+  - '*'
+
+# Don't hoist these packages to avoid conflicts
+public-hoist-pattern:
+  - '*eslint*'
+  - '*prettier*'
+
+# Use store-dir for faster installs
+store-dir: ~/.pnpm-store
+
+# Enable strict-peer-dependencies
+strict-peer-dependencies: false
+
+# Auto install peers
+auto-install-peers: true
+
+# Prefer offline
+prefer-offline: true
