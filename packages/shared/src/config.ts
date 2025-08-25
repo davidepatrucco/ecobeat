@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const envConfigSchema = z.object({
   // Server
   PORT: z.string().default('3000'),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
   
   // Database
   MONGODB_URI: z.string().url(),

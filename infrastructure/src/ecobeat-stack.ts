@@ -28,47 +28,71 @@ export class EcobeatStack extends cdk.Stack {
 
     // Create alias for the key
     new kms.Alias(this, 'JwtSigningKeyAlias', {
-      aliasName: 'alias/ecobeat-jwt-signing',
+      aliasName: `alias/ecobeat-jwt-signing-${stage}`,
       targetKey: jwtKey,
+    });
+
+    // SSM Parameters for MongoDB credentials
+    const mongoUri = new ssm.StringParameter(this, 'MongoUri', {
+      parameterName: `/ecobeat/${stage}/mongodb/uri`,
+      stringValue: 'mongodb+srv://username:password@cluster.mongodb.net/ecobeat', // Will be updated manually
+      description: 'MongoDB Atlas connection URI',
+      tier: ssm.ParameterTier.STANDARD,
+    });
+
+    const mongoUsername = new ssm.StringParameter(this, 'MongoUsername', {
+      parameterName: `/ecobeat/${stage}/mongodb/username`,
+      stringValue: 'PLACEHOLDER_USERNAME', // Will be updated manually
+      description: 'MongoDB Atlas username',
+      tier: ssm.ParameterTier.STANDARD,
+    });
+
+    const mongoPassword = new ssm.StringParameter(this, 'MongoPassword', {
+      parameterName: `/ecobeat/${stage}/mongodb/password`,
+      stringValue: 'PLACEHOLDER_PASSWORD', // Will be updated manually
+      description: 'MongoDB Atlas password',
+      tier: ssm.ParameterTier.STANDARD,
     });
 
     // Lambda function for API
     const apiFunction = new lambda.Function(this, 'ApiFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline(`
-        exports.handler = async (event) => {
-          return {
-            statusCode: 200,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-            body: JSON.stringify({
-              message: 'Ecobeat API - Coming Soon',
-              timestamp: new Date().toISOString(),
-            }),
-          };
-        };
-      `),
+      handler: 'lambda.handler',
+      code: lambda.Code.fromAsset('../apps/api/dist'),
+      memorySize: envConfig.lambda.memorySize,
+      timeout: cdk.Duration.seconds(envConfig.lambda.timeout),
       environment: {
+        NODE_ENV: stage,
         KMS_KEY_ID: jwtKey.keyId,
+        MONGODB_URI_PARAM: mongoUri.parameterName,
+        MONGODB_USERNAME_PARAM: mongoUsername.parameterName,
+        MONGODB_PASSWORD_PARAM: mongoPassword.parameterName,
+        // AWS_REGION is automatically provided by Lambda runtime
       },
+      tracing: envConfig.monitoring.enableXRay ? lambda.Tracing.ACTIVE : lambda.Tracing.DISABLED,
     });
 
     // Grant KMS permissions to Lambda
     jwtKey.grant(apiFunction, 'kms:Sign', 'kms:GetPublicKey');
 
     // CloudWatch Log Group
+    const retentionDays = envConfig.monitoring.logRetentionDays === 7 ? logs.RetentionDays.ONE_WEEK :
+                         envConfig.monitoring.logRetentionDays === 14 ? logs.RetentionDays.TWO_WEEKS :
+                         logs.RetentionDays.ONE_MONTH;
+    
     new logs.LogGroup(this, 'ApiLogGroup', {
       logGroupName: `/aws/lambda/${apiFunction.functionName}`,
-      retention: logs.RetentionDays.ONE_WEEK,
+      retention: retentionDays,
     });
 
     // API Gateway
     const api = new apigateway.RestApi(this, 'EcobeatApi', {
       restApiName: 'Ecobeat API',
       description: 'Ecobeat sustainable lifestyle tracking API',
+      deployOptions: {
+        stageName: stage, // Use the environment stage name
+        description: `${stage} environment deployment`,
+      },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
@@ -76,16 +100,17 @@ export class EcobeatStack extends cdk.Stack {
       },
     });
 
-    // Lambda integration
-    const lambdaIntegration = new apigateway.LambdaIntegration(apiFunction);
+    // Lambda integration with proxy
+    const lambdaIntegration = new apigateway.LambdaIntegration(apiFunction, {
+      proxy: true,
+      allowTestInvoke: true,
+    });
     
-    // Health endpoint
-    const health = api.root.addResource('health');
-    health.addMethod('GET', lambdaIntegration);
-
-    // Auth endpoints (placeholder)
-    const auth = api.root.addResource('auth');
-    auth.addMethod('POST', lambdaIntegration);
+    // Proxy all requests to Lambda (handles all routes including /api/*)
+    api.root.addProxy({
+      defaultIntegration: lambdaIntegration,
+      anyMethod: true,
+    });
 
     // CloudWatch Alarms
     new cloudwatch.Alarm(this, 'ApiErrorAlarm', {
@@ -102,6 +127,12 @@ export class EcobeatStack extends cdk.Stack {
       alarmDescription: 'Lambda function duration',
     });
 
+    // Grant permissions to Lambda
+    jwtKey.grantSign(apiFunction);
+    mongoUri.grantRead(apiFunction);
+    mongoUsername.grantRead(apiFunction);
+    mongoPassword.grantRead(apiFunction);
+
     // Outputs
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url,
@@ -116,6 +147,21 @@ export class EcobeatStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'KmsKeyArn', {
       value: jwtKey.keyArn,
       description: 'KMS Key ARN for JWT signing',
+    });
+
+    new cdk.CfnOutput(this, 'MongoUriParam', {
+      value: mongoUri.parameterName,
+      description: 'SSM Parameter name for MongoDB URI',
+    });
+
+    new cdk.CfnOutput(this, 'MongoUsernameParam', {
+      value: mongoUsername.parameterName,
+      description: 'SSM Parameter name for MongoDB username',
+    });
+
+    new cdk.CfnOutput(this, 'MongoPasswordParam', {
+      value: mongoPassword.parameterName,
+      description: 'SSM Parameter name for MongoDB password',
     });
   }
 }

@@ -7,7 +7,7 @@ import { getEnvironmentConfig } from './environments/config';
 const app = new cdk.App();
 
 // Get environment from context (default to staging)
-const stage = app.node.tryGetContext('stage') || 'staging';
+const stage = app.node.tryGetContext('environment') || app.node.tryGetContext('stage') || 'staging';
 const envConfig = getEnvironmentConfig(stage);
 
 new EcobeatStack(app, `EcobeatStack-${stage}`, {

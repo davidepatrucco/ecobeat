@@ -1,23 +1,76 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { getAppConfig } from '@ecobeat/shared';
+import { createApp } from './app';
 import serverlessExpress from '@vendia/serverless-express';
-import { app } from './app';
 
-// Create serverless handler
-const serverlessHandler = serverlessExpress({ app });
+// Debug handlers for unhandled promises (per suggestion dell'esperto)
+process.on('unhandledRejection', (r) => console.error('unhandledRejection', r));
+process.on('uncaughtException', (e) => console.error('uncaughtException', e));
 
-// Lambda handler
+let serverlessExpressInstance: any;
+let appInitialized = false;
+
+/**
+ * Initialize app with configuration (called once per container)
+ */
+async function initializeApp() {
+  if (!appInitialized) {
+    try {
+      // Load configuration from SSM
+      const config = await getAppConfig();
+      console.log(`📋 Lambda configuration loaded for ${config.NODE_ENV} environment`);
+      
+      // Create app with loaded configuration
+      const app = createApp();
+      
+      // Create serverless express instance
+      serverlessExpressInstance = serverlessExpress({ app });
+      appInitialized = true;
+      
+      console.log('✅ Lambda app initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize app:', error);
+      throw error;
+    }
+  }
+  return serverlessExpressInstance;
+}
+
+/**
+ * AWS Lambda handler for API Gateway proxy events
+ * Seguendo il pattern dell'esperto: async/await + return sempre
+ */
 export const handler = async (
   event: APIGatewayProxyEvent,
   context: Context
 ): Promise<APIGatewayProxyResult> => {
-  console.log('📦 Lambda Event:', JSON.stringify(event, null, 2));
+  console.log('📨 Lambda request:', {
+    method: event.httpMethod,
+    path: event.path,
+    stage: event.requestContext?.stage
+  });
+  
+  // Prevent Lambda from waiting for empty event loop
+  context.callbackWaitsForEmptyEventLoop = false;
   
   try {
-    const result = await serverlessHandler(event, context);
-    console.log('✅ Lambda Result:', JSON.stringify(result, null, 2));
-    return result;
+    // Initialize app if not already done - SEMPRE await
+    const serverlessApp = await initializeApp();
+    
+    // Use serverless-express to handle the request - SEMPRE await e return
+    const result = await serverlessApp(event, context);
+    
+    console.log('✅ Lambda response:', { 
+      statusCode: result.statusCode,
+      bodyLength: result.body?.length || 0 
+    });
+    
+    return result; // <-- SEMPRE return!
+    
   } catch (error) {
-    console.error('❌ Lambda Error:', error);
+    console.error('❌ Lambda handler error:', error);
+    
+    // SEMPRE return anche in caso di errore
     return {
       statusCode: 500,
       headers: {
@@ -25,9 +78,9 @@ export const handler = async (
         'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({
-        error: 'Internal Server Error',
-        message: 'Lambda execution failed',
-        timestamp: new Date().toISOString(),
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       }),
     };
   }

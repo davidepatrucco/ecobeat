@@ -88,12 +88,10 @@ export const productionConfig: EnvironmentConfig = {
 export function getEnvironmentConfig(stage: string): EnvironmentConfig {
   switch (stage) {
     case 'dev':
-    case 'development':
       return developmentConfig;
     case 'staging':
       return stagingConfig;
     case 'prod':
-    case 'production':
       return productionConfig;
     default:
       throw new Error(`Unknown environment: ${stage}`);

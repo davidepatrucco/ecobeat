@@ -17,6 +17,7 @@
     "lint:fix": "eslint src --ext .ts,.tsx --fix"
   },
   "dependencies": {
+    "aws-sdk": "^2.1692.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
