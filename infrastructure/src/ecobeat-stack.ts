@@ -5,6 +5,7 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvironmentConfig } from './environments/config';
 
@@ -54,6 +55,11 @@ export class EcobeatStack extends cdk.Stack {
       tier: ssm.ParameterTier.STANDARD,
     });
 
+    // JWT Secret is managed manually, not by CDK
+
+    // Get deploy tag from context to force Lambda updates
+    const deployTag = String(this.node.tryGetContext('deployTag') ?? Date.now().toString());
+
     // Lambda function for API
     const apiFunction = new lambda.Function(this, 'ApiFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -67,13 +73,14 @@ export class EcobeatStack extends cdk.Stack {
         MONGODB_URI_PARAM: mongoUri.parameterName,
         MONGODB_USERNAME_PARAM: mongoUsername.parameterName,
         MONGODB_PASSWORD_PARAM: mongoPassword.parameterName,
+        DEPLOY_TAG: deployTag, // This forces update when deployTag changes
         // AWS_REGION is automatically provided by Lambda runtime
       },
       tracing: envConfig.monitoring.enableXRay ? lambda.Tracing.ACTIVE : lambda.Tracing.DISABLED,
     });
 
     // Grant KMS permissions to Lambda
-    jwtKey.grant(apiFunction, 'kms:Sign', 'kms:GetPublicKey');
+    jwtKey.grant(apiFunction, 'kms:Sign', 'kms:GetPublicKey', 'kms:DescribeKey');
 
     // CloudWatch Log Group
     const retentionDays = envConfig.monitoring.logRetentionDays === 7 ? logs.RetentionDays.ONE_WEEK :
@@ -127,11 +134,19 @@ export class EcobeatStack extends cdk.Stack {
       alarmDescription: 'Lambda function duration',
     });
 
-    // Grant permissions to Lambda
-    jwtKey.grantSign(apiFunction);
-    mongoUri.grantRead(apiFunction);
-    mongoUsername.grantRead(apiFunction);
+        // Grant permissions to access SSM parameters and KMS
     mongoPassword.grantRead(apiFunction);
+    
+    // Additional IAM permissions for broader SSM access (includes JWT secret)
+    apiFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'ssm:GetParameter',
+        'ssm:GetParameters',
+        'ssm:GetParametersByPath'
+      ],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/ecobeat/${stage}/*`]
+    }));
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiUrl', {
