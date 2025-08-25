@@ -2,15 +2,22 @@ import * as cdk from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as kms from 'aws-cdk-lib/aws-kms';
-import * as ses from 'aws-cdk-lib/aws-ses';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as waf from 'aws-cdk-lib/aws-wafv2';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
+import { EnvironmentConfig } from './environments/config';
+
+interface EcobeatStackProps extends cdk.StackProps {
+  envConfig: EnvironmentConfig;
+}
 
 export class EcobeatStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: EcobeatStackProps) {
     super(scope, id, props);
+
+    const { envConfig } = props;
+    const stage = envConfig.stage;
 
     // KMS Key for JWT signing
     const jwtKey = new kms.Key(this, 'JwtSigningKey', {

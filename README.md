@@ -1,6 +1,157 @@
-# 🌱 Ecobeat - Sustainable Lifestyle Tracker
+# 🌱 Ecobeat - Sustainable Lifestyle Tracking
 
-Ecobeat è un'app mobile per incentivare comportamenti sostenibili attraverso tracking delle attività, gamification, suggerimenti AI personalizzati e un sistema di reward.
+**Ecobeat** è un'applicazione mobile che gamifica le azioni sostenibili quotidiane, aiutando gli utenti a tracciare e ridurre la loro impronta di carbonio.
+
+## 🏗️ Architettura
+
+### **Monorepo Structure**
+```
+ecobeat/
+├── 📱 apps/
+│   ├── mobile/          # React Native app (Expo)
+│   └── api/             # Node.js API (Express + AWS Lambda)
+├── 📦 packages/
+│   ├── shared/          # Types, utilities, config condivisi
+│   └── theme/           # Design tokens e colori
+├── 🏗️ infrastructure/   # AWS CDK (Lambda, API Gateway, KMS)
+├── 📋 docs/             # Documentazione
+└── ⚙️ Root configs      # ESLint, Prettier, Husky hooks
+```
+
+### **Tech Stack**
+- **Mobile**: React Native + Expo + TypeScript
+- **Backend**: Node.js + Express + AWS Lambda
+- **Database**: MongoDB Atlas + Redis ElastiCache  
+- **Infrastructure**: AWS CDK + CloudFormation
+- **Authentication**: JWT + AWS KMS signing
+- **Monitoring**: CloudWatch + X-Ray
+
+## 🚀 Quick Start
+
+### **Prerequisites**
+- Node.js 20+
+- pnpm 8+
+- Expo CLI
+- AWS CLI (for deployment)
+
+### **Installation**
+```bash
+# Clone repository
+git clone https://github.com/davidepatrucco/ecobeat.git
+cd ecobeat
+
+# Install dependencies
+pnpm install
+
+# Start development
+pnpm dev               # Both mobile + API
+pnpm dev:mobile        # Solo mobile app
+pnpm dev:api           # Solo API server
+```
+
+### **Development URLs**
+- **Mobile App**: Expo QR Code → scan with Expo Go
+- **API Server**: http://localhost:3001
+- **Health Check**: http://localhost:3001/health
+
+## 🌳 Git Workflow
+
+| Branch | Environment | Auto-Deploy | URL |
+|--------|------------|-------------|-----|
+| `develop` | Development | ❌ | localhost |
+| `staging` | Staging | ✅ | api-staging.ecobeat.app |
+| `main` | Production | ❌ Manual | api.ecobeat.app |
+
+📖 **[Detailed Branching Strategy](docs/BRANCHING.md)**
+
+## 🛠️ Development Commands
+
+### **App Development**
+```bash
+pnpm dev:mobile        # Start Expo mobile app
+pnpm dev:api           # Start API server locally
+pnpm build             # Build all apps
+pnpm test              # Run all tests
+pnpm lint              # Lint all code
+```
+
+### **Infrastructure**
+```bash
+pnpm infra:build       # Build CDK
+pnpm infra:synth       # Generate CloudFormation
+pnpm infra:deploy:staging  # Deploy to staging
+pnpm infra:deploy:prod     # Deploy to production
+```
+
+## 📱 Mobile App Features
+
+### **Current (Phase 0)**
+- ✅ 5-tab navigation (Home, Activities, Challenges, Rewards, Profile)
+- ✅ CO₂ impact tracking dashboard
+- ✅ Custom Ecobeat logo integration
+- ✅ TypeScript + ESLint + Prettier
+
+### **Planned (Phase 1-3)**
+- 🔄 User authentication (JWT)
+- 🔄 Activity logging and CO₂ calculation
+- 🔄 Gamification system (challenges, rewards)
+- 🔄 Social features and leaderboards
+
+## 🔧 API Endpoints
+
+### **Current**
+- `GET /health` - Health check
+- `POST /auth/*` - Authentication (placeholder)
+
+### **Planned**
+- `POST /auth/register` - User registration
+- `POST /auth/login` - User login
+- `GET /activities` - List user activities
+- `POST /activities` - Log new activity
+- `GET /challenges` - Available challenges
+
+## 🎯 Roadmap
+
+### **✅ Phase 0 - Setup (COMPLETED)**
+- [x] Monorepo with pnpm workspaces
+- [x] Mobile app with Expo + React Native
+- [x] API server with Express + Lambda support
+- [x] AWS CDK infrastructure setup
+- [x] Git workflow + CI/CD preparation
+
+### **🔄 Phase 1 - Infrastructure**
+- [ ] Deploy staging environment
+- [ ] MongoDB Atlas setup
+- [ ] Redis ElastiCache configuration
+- [ ] Domain + SSL certificates
+
+### **🔄 Phase 2 - Authentication**
+- [ ] JWT authentication with KMS signing
+- [ ] User registration/login
+- [ ] Password reset + email verification
+- [ ] Rate limiting + security
+
+### **🔄 Phase 3 - Core Features**
+- [ ] Activity tracking
+- [ ] CO₂ calculation engine
+- [ ] Challenges system
+- [ ] Rewards and gamification
+
+## 🤝 Contributing
+
+1. **Create feature branch** from `develop`
+2. **Make changes** with tests
+3. **Submit PR** to `develop`
+4. **Deploy to staging** for testing
+5. **Merge to main** for production
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+---
+
+**Made with 🌱 for a sustainable future**
 
 ## 🏗️ Architettura
 
