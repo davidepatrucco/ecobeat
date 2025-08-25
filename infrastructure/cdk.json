@@ -1,0 +1,8 @@
+{
+  "app": "node dist/app.js",
+  "requireApproval": "never",
+  "context": {
+    "@aws-cdk/core:enableStackNameDuplicates": "true",
+    "aws-cdk:enableDiffNoFail": "true"
+  }
+}
