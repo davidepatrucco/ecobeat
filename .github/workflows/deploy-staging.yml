@@ -1,0 +1,98 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  deploy-staging:
+    name: Deploy to AWS Staging
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm build --filter=@ecobeat/shared
+
+      - name: Build API
+        run: pnpm build --filter=@ecobeat/api
+
+      - name: Bundle Lambda with esbuild
+        run: cd apps/api && pnpm build:lambda-bundle
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Build infrastructure
+        run: cd infrastructure && pnpm build
+
+      - name: Deploy to staging
+        run: |
+          cd infrastructure
+          pnpm cdk deploy \
+            --context stage=staging \
+            --context deployTag=${{ github.sha }} \
+            --require-approval never
+        env:
+          DEPLOY_TAG: ${{ github.sha }}
+
+      - name: Test deployment
+        run: |
+          # Wait for deployment to be ready
+          sleep 10
+          
+          # Test health endpoint
+          curl -f "https://d1rcql97m4.execute-api.eu-west-1.amazonaws.com/staging/health" || exit 1
+          
+          # Test root endpoint  
+          curl -f "https://d1rcql97m4.execute-api.eu-west-1.amazonaws.com/staging/" || exit 1
+          
+          echo "✅ Deployment successful and endpoints are responding"
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "🚀 Staging deployment successful!"
+          echo "📍 API URL: https://d1rcql97m4.execute-api.eu-west-1.amazonaws.com/staging/"
+          echo "📊 Health: https://d1rcql97m4.execute-api.eu-west-1.amazonaws.com/staging/health/detailed"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Staging deployment failed!"
+          echo "Check the logs above for details."

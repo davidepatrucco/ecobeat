@@ -1,0 +1,114 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [production]
+  workflow_dispatch: # Allow manual trigger
+    inputs:
+      confirm:
+        description: 'Type "DEPLOY" to confirm production deployment'
+        required: true
+        default: ''
+
+jobs:
+  deploy-production:
+    name: Deploy to AWS Production
+    runs-on: ubuntu-latest
+    
+    # Only run if manual trigger has confirmation or if it's a push to production branch
+    if: github.event_name == 'push' || github.event.inputs.confirm == 'DEPLOY'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm build --filter=@ecobeat/shared
+
+      - name: Build API
+        run: pnpm build --filter=@ecobeat/api
+
+      - name: Bundle Lambda with esbuild
+        run: cd apps/api && pnpm build:lambda-bundle
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Build infrastructure
+        run: cd infrastructure && pnpm build
+
+      - name: Deploy to production
+        run: |
+          cd infrastructure
+          pnpm cdk deploy \
+            --context stage=production \
+            --context deployTag=${{ github.sha }} \
+            --require-approval never
+        env:
+          DEPLOY_TAG: ${{ github.sha }}
+
+      - name: Test deployment
+        run: |
+          # Wait for deployment to be ready
+          sleep 15
+          
+          # Get production API URL (will be different from staging)
+          PROD_API_URL=$(aws cloudformation describe-stacks \
+            --region eu-west-1 \
+            --stack-name EcobeatStack-production \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          
+          echo "Testing production API at: $PROD_API_URL"
+          
+          # Test health endpoint
+          curl -f "${PROD_API_URL}health" || exit 1
+          
+          # Test root endpoint  
+          curl -f "${PROD_API_URL}" || exit 1
+          
+          echo "✅ Production deployment successful and endpoints are responding"
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "🚀 Production deployment successful!"
+          echo "🔴 PRODUCTION IS LIVE!"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed!"
+          echo "🚨 PRODUCTION DEPLOYMENT ISSUE - CHECK IMMEDIATELY!"
