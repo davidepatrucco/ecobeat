@@ -7,20 +7,20 @@ const zod_1 = require("zod");
 exports.envConfigSchema = zod_1.z.object({
     // Server
     PORT: zod_1.z.string().default('3000'),
-    NODE_ENV: zod_1.z.enum(['development', 'production', 'test']).default('development'),
+    NODE_ENV: zod_1.z.enum(['development', 'staging', 'production', 'test']).default('development'),
     // Database
     MONGODB_URI: zod_1.z.string().url(),
-    // Redis
-    REDIS_URL: zod_1.z.string().url(),
-    // JWT
+    // Redis (optional for now in Lambda environment)
+    REDIS_URL: zod_1.z.string().url().optional(),
+    // JWT - will use AWS KMS in Lambda, local secret in dev
     JWT_SECRET: zod_1.z.string().min(32),
     JWT_EXPIRES_IN: zod_1.z.string().default('15m'),
     REFRESH_TOKEN_EXPIRES_IN: zod_1.z.string().default('7d'),
-    // AWS
+    // AWS - will be provided as env vars in Lambda
     AWS_REGION: zod_1.z.string().default('eu-west-1'),
-    AWS_KMS_KEY_ID: zod_1.z.string(),
-    // Email
-    SES_FROM_EMAIL: zod_1.z.string().email(),
+    AWS_KMS_KEY_ID: zod_1.z.string().optional(),
+    // Email (optional for now)
+    SES_FROM_EMAIL: zod_1.z.string().email().optional(),
     SES_REGION: zod_1.z.string().default('eu-west-1'),
     // Rate Limiting
     RATE_LIMIT_WINDOW_MS: zod_1.z.string().default('900000'),

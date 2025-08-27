@@ -24,6 +24,7 @@ export async function getConfigFromSSM(): Promise<Partial<EnvConfig>> {
         `/ecobeat/${stage}/mongodb/uri`,
         `/ecobeat/${stage}/mongodb/username`, 
         `/ecobeat/${stage}/mongodb/password`,
+        `/ecobeat/${stage}/jwt/secret`,
       ],
       WithDecryption: true,
     }).promise();
@@ -34,6 +35,9 @@ export async function getConfigFromSSM(): Promise<Partial<EnvConfig>> {
       if (param.Name?.includes('/mongodb/uri')) {
         params.MONGODB_URI = param.Value!;
         console.log(`✅ Loaded MongoDB URI from SSM`);
+      } else if (param.Name?.includes('/jwt/secret')) {
+        params.JWT_SECRET = param.Value!;
+        console.log(`✅ Loaded JWT Secret from SSM`);
       }
       // Username and password are available if needed separately
     });
@@ -63,8 +67,13 @@ export async function getAppConfig(): Promise<EnvConfig> {
       ssmConfig = await getConfigFromSSM();
     }
     
-    // Merge configurations (SSM overrides env vars)
-    const finalConfig = { ...envVars, ...ssmConfig };
+    // Merge configurations with Lambda environment variables taking priority
+    const finalConfig = { 
+      ...envVars, 
+      ...ssmConfig,
+      // In Lambda, use KMS instead of JWT_SECRET
+      ...(envVars.KMS_KEY_ID && { AWS_KMS_KEY_ID: envVars.KMS_KEY_ID })
+    };
     
     // Validate using the schema
     return validateEnvConfig(finalConfig);

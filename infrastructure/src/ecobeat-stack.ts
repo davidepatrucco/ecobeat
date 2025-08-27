@@ -113,7 +113,10 @@ export class EcobeatStack extends cdk.Stack {
       allowTestInvoke: true,
     });
     
-    // Proxy all requests to Lambda (handles all routes including /api/*)
+    // Add method for root path /
+    api.root.addMethod('GET', lambdaIntegration);
+    
+    // Proxy all other requests to Lambda (handles all routes like /health, /auth/*)
     api.root.addProxy({
       defaultIntegration: lambdaIntegration,
       anyMethod: true,

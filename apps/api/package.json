@@ -5,21 +5,19 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "build:lambda": "tsc && cp package.json dist/ && cd dist && npm install --production",
-    "dev": "tsx watch src/index.ts",
-    "dev:lambda": "tsx watch src/lambda.ts",
-    "start": "node dist/index.js",
-    "start:lambda": "node dist/lambda.js",
-    "test": "jest",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "dev": "nodemon src/server.ts",
+    "start": "node dist/server.js",
+    "build:lambda-bundle": "esbuild src/lambda.ts --bundle --platform=node --target=node20 --outfile=dist/lambda.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@ecobeat/shared": "workspace:*",
     "@codegenie/serverless-express": "^4.17.0",
     "@vendia/serverless-express": "^4.12.6",
     "aws-sdk": "^2.1692.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "esbuild": "^0.25.9",
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "mongoose": "^8.18.0",

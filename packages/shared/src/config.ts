@@ -9,20 +9,20 @@ export const envConfigSchema = z.object({
   // Database
   MONGODB_URI: z.string().url(),
   
-  // Redis
-  REDIS_URL: z.string().url(),
+  // Redis (optional for now in Lambda environment)
+  REDIS_URL: z.string().url().optional(),
   
-  // JWT
+  // JWT - will use AWS KMS in Lambda, local secret in dev
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
   
-  // AWS
+  // AWS - will be provided as env vars in Lambda
   AWS_REGION: z.string().default('eu-west-1'),
-  AWS_KMS_KEY_ID: z.string(),
+  AWS_KMS_KEY_ID: z.string().optional(),
   
-  // Email
-  SES_FROM_EMAIL: z.string().email(),
+  // Email (optional for now)
+  SES_FROM_EMAIL: z.string().email().optional(),
   SES_REGION: z.string().default('eu-west-1'),
   
   // Rate Limiting

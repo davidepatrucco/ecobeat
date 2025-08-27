@@ -47,7 +47,10 @@ export const handler = async (
   console.log('📨 Lambda request:', {
     method: event.httpMethod,
     path: event.path,
-    stage: event.requestContext?.stage
+    pathParameters: event.pathParameters,
+    resource: event.resource,
+    stage: event.requestContext?.stage,
+    fullEvent: JSON.stringify(event, null, 2)
   });
   
   // Prevent Lambda from waiting for empty event loop
