@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { getAppConfig } from '@ecobeat/shared';
-import { testMongoConnection, testKMSAccess, testRedisConnection, testSSMAccess } from '../services/health-checks';
+import {
+  testMongoConnection,
+  testKMSAccess,
+  testRedisConnection,
+  testSSMAccess,
+} from '../services/health-checks';
+// import { DatabaseService } from '../services/database'; // Used inline in detailed health check
 
 export const healthRouter = Router();
 
@@ -41,8 +47,8 @@ healthRouter.get('/detailed', async (req, res) => {
       mongodb: 'unknown',
       kms: 'unknown',
       ssm: 'unknown',
-      redis: 'unknown'
-    }
+      redis: 'unknown',
+    },
   };
 
   let allHealthy = true;
@@ -66,7 +72,7 @@ healthRouter.get('/detailed', async (req, res) => {
         healthStatus.checks.mongodb = mongoTest.status;
         healthStatus.mongoLatency = mongoTest.latency;
         healthStatus.mongoError = mongoTest.error;
-        
+
         if (mongoTest.status === 'error') {
           allHealthy = false;
         }
@@ -76,7 +82,8 @@ healthRouter.get('/detailed', async (req, res) => {
       }
     } catch (error) {
       healthStatus.checks.mongodb = 'error';
-      healthStatus.mongoError = error instanceof Error ? error.message : 'Unknown error';
+      healthStatus.mongoError =
+        error instanceof Error ? error.message : 'Unknown error';
       allHealthy = false;
     }
 
@@ -88,7 +95,7 @@ healthRouter.get('/detailed', async (req, res) => {
         healthStatus.checks.kms = kmsTest.status;
         healthStatus.kmsKeyArn = kmsTest.keyArn;
         healthStatus.kmsError = kmsTest.error;
-        
+
         if (kmsTest.status === 'error') {
           allHealthy = false;
         }
@@ -98,7 +105,8 @@ healthRouter.get('/detailed', async (req, res) => {
       }
     } catch (error) {
       healthStatus.checks.kms = 'error';
-      healthStatus.kmsError = error instanceof Error ? error.message : 'Unknown error';
+      healthStatus.kmsError =
+        error instanceof Error ? error.message : 'Unknown error';
       allHealthy = false;
     }
 
@@ -106,25 +114,26 @@ healthRouter.get('/detailed', async (req, res) => {
     try {
       const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
       const environment = process.env.NODE_ENV;
-      
+
       if (isLambda && environment && environment !== 'development') {
         const ssmTest = await testSSMAccess(environment);
         healthStatus.checks.ssm = ssmTest.status;
         healthStatus.ssmParameters = ssmTest.parameters;
         healthStatus.ssmError = ssmTest.error;
-        
+
         if (ssmTest.status === 'error') {
           allHealthy = false;
         }
       } else {
         healthStatus.checks.ssm = `local_environment_${environment}`;
       }
-      
+
       healthStatus.isLambda = !!isLambda;
       healthStatus.lambdaFunction = isLambda || 'none';
     } catch (error) {
       healthStatus.checks.ssm = 'error';
-      healthStatus.ssmError = error instanceof Error ? error.message : 'Unknown error';
+      healthStatus.ssmError =
+        error instanceof Error ? error.message : 'Unknown error';
       allHealthy = false;
     }
 
@@ -147,7 +156,6 @@ healthRouter.get('/detailed', async (req, res) => {
     const statusCode = allHealthy ? 200 : 503;
 
     res.status(statusCode).json(healthStatus);
-
   } catch (error) {
     console.error('Health check error:', error);
     res.status(500).json({
@@ -155,7 +163,7 @@ healthRouter.get('/detailed', async (req, res) => {
       timestamp: new Date().toISOString(),
       service: 'ecobeat-api',
       error: 'Detailed health check failed',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

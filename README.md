@@ -5,6 +5,7 @@
 ## 🏗️ Architettura
 
 ### **Monorepo Structure**
+
 ```
 ecobeat/
 ├── 📱 apps/
@@ -13,28 +14,33 @@ ecobeat/
 ├── 📦 packages/
 │   ├── shared/          # Types, utilities, config condivisi
 │   └── theme/           # Design tokens e colori
-├── 🏗️ infrastructure/   # AWS CDK (Lambda, API Gateway, KMS)
+├── 🏗️ infrastructure/   # AWS CDK (Lambda, API Gateway, KMS, SES)
 ├── 📋 docs/             # Documentazione
 └── ⚙️ Root configs      # ESLint, Prettier, Husky hooks
 ```
 
 ### **Tech Stack**
+
 - **Mobile**: React Native + Expo + TypeScript
 - **Backend**: Node.js + Express + AWS Lambda
-- **Database**: MongoDB Atlas + Redis ElastiCache  
+- **Database**: MongoDB Atlas
 - **Infrastructure**: AWS CDK + CloudFormation
-- **Authentication**: JWT + AWS KMS signing
+- **Authentication**: JWT + AWS KMS signing + Refresh Tokens
+- **Email**: AWS SES con template HTML/text
+- **Security**: Rate limiting + bcrypt + CORS
 - **Monitoring**: CloudWatch + X-Ray
 
 ## 🚀 Quick Start
 
 ### **Prerequisites**
+
 - Node.js 20+
 - pnpm 8+
 - Expo CLI
 - AWS CLI (for deployment)
 
 ### **Installation**
+
 ```bash
 # Clone repository
 git clone https://github.com/davidepatrucco/ecobeat.git
@@ -50,23 +56,48 @@ pnpm dev:api           # Solo API server
 ```
 
 ### **Development URLs**
+
 - **Mobile App**: Expo QR Code → scan with Expo Go
-- **API Server**: http://localhost:3001
-- **Health Check**: http://localhost:3001/health
+- **API Server**: http://localhost:3000
+- **Health Check**: http://localhost:3000/health
+- **JWKS Endpoint**: http://localhost:3000/.well-known/jwks.json
+
+## 🔐 Authentication System
+
+### **✅ Implemented Features**
+
+- **JWT Authentication** with AWS KMS signing
+- **Refresh Token Rotation** with secure storage
+- **Email Verification** with AWS SES integration
+- **Password Reset** with secure token-based flow
+- **Biometric Authentication** for mobile devices
+- **Rate Limiting** to prevent abuse
+- **JWKS Endpoint** for JWT public key distribution
+
+### **Security Features**
+
+- 🔐 **KMS Integration**: JWT signing with AWS KMS (RSA-2048)
+- 🔄 **Token Rotation**: Automatic refresh token rotation
+- 📧 **Email Verification**: SES with HTML/text templates
+- 🛡️ **Rate Limiting**: Multiple levels of protection
+- 📱 **Biometric Support**: Touch ID / Face ID integration
+- 🔒 **Secure Storage**: Encrypted credential management
+- ⏰ **TTL Management**: Automatic cleanup of expired tokens
 
 ## 🌳 Git Workflow
 
-| Branch | Environment | Auto-Deploy | URL |
-|--------|------------|-------------|-----|
-| `develop` | Development | ❌ | localhost |
-| `staging` | Staging | ✅ | api-staging.ecobeat.app |
-| `main` | Production | ❌ Manual | api.ecobeat.app |
+| Branch    | Environment | Auto-Deploy | URL                     |
+| --------- | ----------- | ----------- | ----------------------- |
+| `develop` | Development | ❌          | localhost               |
+| `staging` | Staging     | ✅          | api-staging.ecobeat.app |
+| `main`    | Production  | ❌ Manual   | api.ecobeat.app         |
 
 📖 **[Detailed Branching Strategy](docs/BRANCHING.md)**
 
 ## 🛠️ Development Commands
 
 ### **App Development**
+
 ```bash
 pnpm dev:mobile        # Start Expo mobile app
 pnpm dev:api           # Start API server locally
@@ -75,7 +106,55 @@ pnpm test              # Run all tests
 pnpm lint              # Lint all code
 ```
 
+## 🔑 **Authentication & Security Features**
+
+### **JWT & JWKS Implementation**
+
+- ✅ **JWT Signing**: AWS KMS RSA-2048 keys with rotation support
+- ✅ **JWKS Endpoint**: Standard `/.well-known/jwks.json` for distributed validation
+- ✅ **JWT Validator**: Server-side validation with signature verification
+- ✅ **Key Management**: Automatic key extraction from KMS (n, e values)
+- ✅ **Caching**: 15-minute JWKS cache for optimal performance
+
+### **Biometric Authentication**
+
+- ✅ **Device Registration**: Secure biometric credential storage
+- ✅ **Challenge/Response**: Cryptographic challenge generation
+- ✅ **Multi-Device Support**: Multiple biometric credentials per user
+- ✅ **Credential Management**: Registration, verification, and revocation APIs
+
+### **Email Security**
+
+- ✅ **AWS SES Integration**: Production-ready email service
+- ✅ **Template System**: Professional HTML + text email templates
+- ✅ **Parameter Store**: Environment-specific configuration loading
+- ✅ **Rate Limiting**: Multi-level spam protection system
+
+### **API Testing**
+
+```bash
+# Test authentication endpoints
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"TestPassword123!","firstName":"Test","lastName":"User"}'
+
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"TestPassword123!"}'
+
+# Test JWKS and JWT validation
+curl http://localhost:3000/.well-known/jwks.json
+curl http://localhost:3000/test/jwks  # Development test endpoint
+
+# Test biometric authentication
+curl -X POST http://localhost:3000/biometric/register \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{"deviceInfo":{"name":"iPhone 15","biometricType":"faceID"}}'
+```
+
 ### **Infrastructure**
+
 ```bash
 pnpm infra:build       # Build CDK
 pnpm infra:synth       # Generate CloudFormation
@@ -83,15 +162,113 @@ pnpm infra:deploy:staging  # Deploy to staging
 pnpm infra:deploy:prod     # Deploy to production
 ```
 
+## 📊 **API Endpoints Documentation**
+
+### **Authentication Endpoints**
+
+| Method | Endpoint                | Description                               | Auth Required |
+| ------ | ----------------------- | ----------------------------------------- | ------------- |
+| POST   | `/auth/register`        | User registration with email verification | No            |
+| GET    | `/auth/verify-email`    | Email verification via token              | No            |
+| POST   | `/auth/login`           | Email/password login                      | No            |
+| POST   | `/auth/refresh`         | Refresh JWT tokens                        | No            |
+| POST   | `/auth/logout`          | Logout (invalidate refresh token)         | Yes           |
+| POST   | `/auth/logout-all`      | Logout from all devices                   | Yes           |
+| POST   | `/auth/forgot-password` | Request password reset email              | No            |
+| POST   | `/auth/reset-password`  | Reset password with token                 | No            |
+
+### **Biometric Authentication**
+
+| Method | Endpoint                          | Description                       | Auth Required |
+| ------ | --------------------------------- | --------------------------------- | ------------- |
+| POST   | `/biometric/register`             | Register biometric credentials    | Yes           |
+| POST   | `/biometric/challenge`            | Create authentication challenge   | Yes           |
+| POST   | `/biometric/verify`               | Verify biometric authentication   | Yes           |
+| GET    | `/biometric/credentials`          | List user's biometric credentials | Yes           |
+| DELETE | `/biometric/revoke/:credentialId` | Revoke biometric credential       | Yes           |
+
+### **Email Services**
+
+| Method | Endpoint                     | Description               | Auth Required |
+| ------ | ---------------------------- | ------------------------- | ------------- |
+| POST   | `/email/send-verification`   | Send email verification   | No            |
+| POST   | `/email/send-password-reset` | Send password reset email | No            |
+
+### **Security & Utilities**
+
+| Method | Endpoint                 | Description                         | Auth Required |
+| ------ | ------------------------ | ----------------------------------- | ------------- |
+| GET    | `/.well-known/jwks.json` | JSON Web Key Set for JWT validation | No            |
+| GET    | `/health`                | Basic health check                  | No            |
+| GET    | `/health/detailed`       | Detailed system health              | No            |
+| GET    | `/test/jwks`             | JWKS test endpoint (dev only)       | No            |
+| POST   | `/test/validate-jwt`     | JWT validation test (dev only)      | No            |
+
+## 📊 Rate Limiting Configuration
+
+| Endpoint              | Window   | Max Requests | Purpose                   |
+| --------------------- | -------- | ------------ | ------------------------- |
+| Email Verification    | 15 min   | 3 requests   | Prevent email spam        |
+| Password Reset        | 1 hour   | 5 requests   | Security protection       |
+| Login Attempts        | 15 min   | 10 requests  | Brute force prevention    |
+| Registration          | 1 hour   | 3 requests   | Account creation limits   |
+| Email Verification DB | 24 hours | 5 emails     | Database-level protection |
+
+## 🚀 Production Configuration
+
+### **AWS Services Used**
+
+- **Lambda**: Serverless API hosting
+- **API Gateway**: HTTP endpoints and CORS
+- **KMS**: JWT signing with RSA-2048 keys
+- **SES**: Transactional email sending
+- **Parameter Store**: Environment configuration
+- **CloudWatch**: Logging and monitoring
+
+### **Environment Variables**
+
+```bash
+# Required for production
+NODE_ENV=production
+AWS_REGION=us-east-1
+KMS_KEY_ID=alias/ecobeat-jwt-signing-production
+
+# Parameter Store paths (auto-loaded)
+MONGODB_URI_PARAM=/ecobeat/production/mongodb/uri
+FROM_EMAIL_PARAM=/ecobeat/production/ses/from-email
+BASE_URL_PARAM=/ecobeat/production/app/base-url
+```
+
+### **SES Email Templates**
+
+- **Email Verification**: Professional HTML + text templates
+- **Password Reset**: Security-focused design with warnings
+- **Template Features**: Responsive design, brand colors, clear CTAs
+
+### **Security Best Practices**
+
+- ✅ bcrypt password hashing (salt rounds: 12)
+- ✅ JWT signed with AWS KMS (RSA-2048)
+- ✅ Refresh token rotation on every use
+- ✅ Rate limiting with in-memory + database checks
+- ✅ CORS configuration for specific origins
+- ✅ Helmet.js security headers
+- ✅ Input validation with Zod schemas
+- ✅ TTL cleanup for expired tokens
+
+## 🤝 Contributing
+
 ## 📱 Mobile App Features
 
 ### **Current (Phase 0)**
+
 - ✅ 5-tab navigation (Home, Activities, Challenges, Rewards, Profile)
 - ✅ CO₂ impact tracking dashboard
 - ✅ Custom Ecobeat logo integration
 - ✅ TypeScript + ESLint + Prettier
 
 ### **Planned (Phase 1-3)**
+
 - 🔄 User authentication (JWT)
 - 🔄 Activity logging and CO₂ calculation
 - 🔄 Gamification system (challenges, rewards)
@@ -99,43 +276,89 @@ pnpm infra:deploy:prod     # Deploy to production
 
 ## 🔧 API Endpoints
 
-### **Current**
-- `GET /health` - Health check
-- `POST /auth/*` - Authentication (placeholder)
+### **✅ Authentication**
 
-### **Planned**
-- `POST /auth/register` - User registration
-- `POST /auth/login` - User login
+- `POST /auth/register` - User registration with validation
+- `POST /auth/login` - User login with rate limiting
+- `POST /auth/refresh` - Refresh access token
+- `POST /auth/logout` - Logout with token revocation
+- `POST /auth/revoke-all` - Revoke all user tokens
+- `GET /auth/me` - Get current user info
+
+### **✅ Email Services**
+
+- `POST /email/send-verification` - Send email verification
+- `POST /email/verify` - Verify email token
+- `POST /email/send-password-reset` - Request password reset
+- `POST /email/verify-reset-token` - Verify reset token
+- `POST /email/reset-password` - Complete password reset
+
+### **✅ Biometric Authentication**
+
+- `POST /biometric/register` - Register biometric credential
+- `POST /biometric/challenge` - Create authentication challenge
+- `POST /biometric/verify` - Verify biometric authentication
+- `GET /biometric/credentials` - List user's credentials
+- `DELETE /biometric/revoke` - Revoke biometric credential
+- `GET /biometric/status/:deviceId` - Check biometric status
+
+### **✅ Security & Infrastructure**
+
+- `GET /health` - Health check with detailed info
+- `GET /.well-known/jwks.json` - JWT public keys
+
+### **🔄 Planned Features**
+
 - `GET /activities` - List user activities
 - `POST /activities` - Log new activity
 - `GET /challenges` - Available challenges
+- `GET /leaderboard` - User rankings
 
 ## 🎯 Roadmap
 
 ### **✅ Phase 0 - Setup (COMPLETED)**
+
 - [x] Monorepo with pnpm workspaces
 - [x] Mobile app with Expo + React Native
 - [x] API server with Express + Lambda support
 - [x] AWS CDK infrastructure setup
 - [x] Git workflow + CI/CD preparation
 
-### **🔄 Phase 1 - Infrastructure**
-- [ ] Deploy staging environment
-- [ ] MongoDB Atlas setup
-- [ ] Redis ElastiCache configuration
-- [ ] Domain + SSL certificates
+### **✅ Phase 1 - Infrastructure (COMPLETED)**
 
-### **🔄 Phase 2 - Authentication**
-- [ ] JWT authentication with KMS signing
-- [ ] User registration/login
-- [ ] Password reset + email verification
-- [ ] Rate limiting + security
+- [x] AWS CDK with KMS, SES, Parameter Store
+- [x] MongoDB Atlas integration
+- [x] Environment configuration (staging/production)
+- [x] Security headers and CORS
+- [x] Error handling and logging
 
-### **🔄 Phase 3 - Core Features**
-- [ ] Activity tracking
-- [ ] CO₂ calculation engine
-- [ ] Challenges system
-- [ ] Rewards and gamification
+### **✅ Phase 2 - Authentication (COMPLETED)**
+
+- [x] JWT authentication with KMS signing
+- [x] User registration/login with validation
+- [x] Password reset + email verification (SES)
+- [x] Refresh token rotation system
+- [x] Rate limiting + security middleware
+- [x] Biometric authentication for mobile
+- [x] JWKS endpoint for public key distribution
+
+### **🔄 Phase 3 - Core Features (NEXT)**
+
+- [ ] Activity tracking and categorization
+- [ ] CO₂ calculation engine with real factors
+- [ ] Challenges system with gamification
+- [ ] Rewards and achievement system
+- [ ] User profile and preferences
+- [ ] Social features and leaderboards
+
+### **🔄 Phase 4 - Advanced Features**
+
+- [ ] AI-powered personalized suggestions
+- [ ] Push notifications with Expo
+- [ ] Offline sync capabilities
+- [ ] Advanced analytics dashboard
+- [ ] B2B features for companies
+- [ ] Third-party integrations (fitness apps, smart home)
 
 ## 🤝 Contributing
 
@@ -257,6 +480,47 @@ pnpm build
 - ✅ **Tracking attività** sostenibili (trasporti, alimentazione, riciclo)
 - ✅ **Suggerimenti AI** base (rule-based)
 - ✅ **Gamification** semplice (punti, livelli, badge)
+
+## 🗓️ **Development Roadmap**
+
+### **✅ Phase 1 - Infrastructure & Authentication (COMPLETED)**
+
+- ✅ **Monorepo Setup**: PNPM workspaces with apps/mobile, apps/api, packages/shared
+- ✅ **AWS Infrastructure**: CDK stack with Lambda, API Gateway, KMS, SES
+- ✅ **Authentication System**: Complete JWT auth with refresh tokens
+- ✅ **Email Service**: AWS SES with production templates
+- ✅ **Rate Limiting**: Multi-level spam protection
+- ✅ **Biometric Auth**: Device-based authentication for mobile
+- ✅ **JWKS Endpoint**: Standard JWT validation for distributed systems
+- ✅ **Security Features**: bcrypt hashing, KMS signing, CORS, Helmet.js
+
+### **🔄 Phase 2 - Mobile Application (IN PROGRESS)**
+
+- 🔄 **Expo Setup**: NativeWind, React Query, Zustand, i18n
+- 🔄 **Auth Screens**: Login, Register, Biometric, Email verification
+- 🔄 **Session Management**: Auto-refresh, secure storage
+- 📋 **Onboarding**: User profile setup and preferences
+- 📋 **Dashboard**: Impact tracking and quick actions
+
+### **📋 Phase 3 - Core Features (PLANNED)**
+
+- 📋 **Activity Tracking**: Carbon footprint calculation engine
+- 📋 **Impact Analytics**: Weekly/monthly reporting with charts
+- 📋 **Gamification**: Points, badges, challenges system
+- 📋 **AI Suggestions**: Personalized eco-friendly recommendations
+
+### **📋 Phase 4 - Rewards & Partnerships (PLANNED)**
+
+- 📋 **Reward System**: Points redemption and coupon engine
+- 📋 **Partner Integration**: Local business partnerships
+- 📋 **Marketplace**: Eco-friendly products and services
+
+### **📋 Phase 5 - Advanced Features (FUTURE)**
+
+- 📋 **B2B Dashboard**: Corporate sustainability tracking
+- 📋 **IoT Integration**: Smart home and wearable devices
+- 📋 **Advanced AI**: Machine learning recommendations
+- 📋 **Community Features**: Social challenges and competitions
 
 ### Roadmap Future
 

@@ -6,6 +6,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as ses from 'aws-cdk-lib/aws-ses';
 import { Construct } from 'constructs';
 import { EnvironmentConfig } from './environments/config';
 
@@ -36,7 +37,8 @@ export class EcobeatStack extends cdk.Stack {
     // SSM Parameters for MongoDB credentials
     const mongoUri = new ssm.StringParameter(this, 'MongoUri', {
       parameterName: `/ecobeat/${stage}/mongodb/uri`,
-      stringValue: 'mongodb+srv://username:password@cluster.mongodb.net/ecobeat', // Will be updated manually
+      stringValue:
+        'mongodb+srv://username:password@cluster.mongodb.net/ecobeat', // Will be updated manually
       description: 'MongoDB Atlas connection URI',
       tier: ssm.ParameterTier.STANDARD,
     });
@@ -57,8 +59,50 @@ export class EcobeatStack extends cdk.Stack {
 
     // JWT Secret is managed manually, not by CDK
 
+    // SES Configuration
+    const sesFromEmail = new ssm.StringParameter(this, 'SesFromEmail', {
+      parameterName: `/ecobeat/${stage}/ses/from-email`,
+      stringValue:
+        stage === 'production'
+          ? 'noreply@ecobeat.app'
+          : `noreply-${stage}@ecobeat.app`,
+      description: 'SES From Email Address',
+      tier: ssm.ParameterTier.STANDARD,
+    });
+
+    const sesReplyToEmail = new ssm.StringParameter(this, 'SesReplyToEmail', {
+      parameterName: `/ecobeat/${stage}/ses/reply-to-email`,
+      stringValue:
+        stage === 'production'
+          ? 'support@ecobeat.app'
+          : `support-${stage}@ecobeat.app`,
+      description: 'SES Reply-To Email Address',
+      tier: ssm.ParameterTier.STANDARD,
+    });
+
+    const baseUrl = new ssm.StringParameter(this, 'BaseUrl', {
+      parameterName: `/ecobeat/${stage}/app/base-url`,
+      stringValue:
+        stage === 'production'
+          ? 'https://app.ecobeat.app'
+          : `https://${stage}.ecobeat.app`,
+      description: 'Base URL for email links',
+      tier: ssm.ParameterTier.STANDARD,
+    });
+
+    // SES Identity (domain verification will be done manually)
+    // This creates the identity in SES, but domain verification must be done manually
+    if (stage === 'production') {
+      new ses.EmailIdentity(this, 'SesEmailIdentity', {
+        identity: ses.Identity.domain('ecobeat.app'),
+        mailFromDomain: 'mail.ecobeat.app',
+      });
+    }
+
     // Get deploy tag from context to force Lambda updates
-    const deployTag = String(this.node.tryGetContext('deployTag') ?? Date.now().toString());
+    const deployTag = String(
+      this.node.tryGetContext('deployTag') ?? Date.now().toString()
+    );
 
     // Lambda function for API
     const apiFunction = new lambda.Function(this, 'ApiFunction', {
@@ -73,20 +117,55 @@ export class EcobeatStack extends cdk.Stack {
         MONGODB_URI_PARAM: mongoUri.parameterName,
         MONGODB_USERNAME_PARAM: mongoUsername.parameterName,
         MONGODB_PASSWORD_PARAM: mongoPassword.parameterName,
+        FROM_EMAIL_PARAM: sesFromEmail.parameterName,
+        REPLY_TO_EMAIL_PARAM: sesReplyToEmail.parameterName,
+        BASE_URL_PARAM: baseUrl.parameterName,
         DEPLOY_TAG: deployTag, // This forces update when deployTag changes
         // AWS_REGION is automatically provided by Lambda runtime
       },
-      tracing: envConfig.monitoring.enableXRay ? lambda.Tracing.ACTIVE : lambda.Tracing.DISABLED,
+      tracing: envConfig.monitoring.enableXRay
+        ? lambda.Tracing.ACTIVE
+        : lambda.Tracing.DISABLED,
     });
 
     // Grant KMS permissions to Lambda
-    jwtKey.grant(apiFunction, 'kms:Sign', 'kms:GetPublicKey', 'kms:DescribeKey');
+    jwtKey.grant(
+      apiFunction,
+      'kms:Sign',
+      'kms:GetPublicKey',
+      'kms:DescribeKey'
+    );
+
+    // Grant SSM permissions to Lambda for accessing parameters
+    mongoUri.grantRead(apiFunction);
+    mongoUsername.grantRead(apiFunction);
+    mongoPassword.grantRead(apiFunction);
+    sesFromEmail.grantRead(apiFunction);
+    sesReplyToEmail.grantRead(apiFunction);
+    baseUrl.grantRead(apiFunction);
+
+    // Grant SES permissions to Lambda
+    apiFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'ses:SendEmail',
+          'ses:SendRawEmail',
+          'ses:GetSendQuota',
+          'ses:GetSendStatistics',
+        ],
+        resources: ['*'], // SES permissions are typically granted on all resources
+      })
+    );
 
     // CloudWatch Log Group
-    const retentionDays = envConfig.monitoring.logRetentionDays === 7 ? logs.RetentionDays.ONE_WEEK :
-                         envConfig.monitoring.logRetentionDays === 14 ? logs.RetentionDays.TWO_WEEKS :
-                         logs.RetentionDays.ONE_MONTH;
-    
+    const retentionDays =
+      envConfig.monitoring.logRetentionDays === 7
+        ? logs.RetentionDays.ONE_WEEK
+        : envConfig.monitoring.logRetentionDays === 14
+          ? logs.RetentionDays.TWO_WEEKS
+          : logs.RetentionDays.ONE_MONTH;
+
     new logs.LogGroup(this, 'ApiLogGroup', {
       logGroupName: `/aws/lambda/${apiFunction.functionName}`,
       retention: retentionDays,
@@ -103,7 +182,12 @@ export class EcobeatStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key'],
+        allowHeaders: [
+          'Content-Type',
+          'X-Amz-Date',
+          'Authorization',
+          'X-Api-Key',
+        ],
       },
     });
 
@@ -112,10 +196,10 @@ export class EcobeatStack extends cdk.Stack {
       proxy: true,
       allowTestInvoke: true,
     });
-    
+
     // Add method for root path /
     api.root.addMethod('GET', lambdaIntegration);
-    
+
     // Proxy all other requests to Lambda (handles all routes like /health, /auth/*)
     api.root.addProxy({
       defaultIntegration: lambdaIntegration,
@@ -137,19 +221,23 @@ export class EcobeatStack extends cdk.Stack {
       alarmDescription: 'Lambda function duration',
     });
 
-        // Grant permissions to access SSM parameters and KMS
+    // Grant permissions to access SSM parameters and KMS
     mongoPassword.grantRead(apiFunction);
-    
+
     // Additional IAM permissions for broader SSM access (includes JWT secret)
-    apiFunction.addToRolePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'ssm:GetParameter',
-        'ssm:GetParameters',
-        'ssm:GetParametersByPath'
-      ],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/ecobeat/${stage}/*`]
-    }));
+    apiFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'ssm:GetParameter',
+          'ssm:GetParameters',
+          'ssm:GetParametersByPath',
+        ],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/ecobeat/${stage}/*`,
+        ],
+      })
+    );
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiUrl', {

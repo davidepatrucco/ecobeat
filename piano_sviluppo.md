@@ -1,24 +1,24 @@
-🧭 Fase 0 — Preparazione 
+🧭 Fase 0 — Preparazione
 
- Repo monorepo (pnpm workspaces): apps/mobile, apps/api, packages/shared
+Repo monorepo (pnpm workspaces): apps/mobile, apps/api, packages/shared
 
 DoD: lint, prettier, tsconfig condiviso, commit hooks (husky+lint-staged).
 
- Gestione segreti: .env.example, AWS SSM/Secrets Manager, schema config.
+Gestione segreti: .env.example, AWS SSM/Secrets Manager, schema config.
 
- Design tokens: palette, tipografia, spaziature in packages/shared/theme.
+Design tokens: palette, tipografia, spaziature in packages/shared/theme.
 
-☁️ Fase 1 — Infrastruttura (IaC CDK) 
+☁️ Fase 1 — Infrastruttura (IaC CDK)
 
- Stack base: API Gateway (REST), Lambda Node 20, LogGroup, WAF, CloudWatch Alarms.
+Stack base: API Gateway (REST), Lambda Node 20, LogGroup, WAF, CloudWatch Alarms.
 
- KMS key: per firma JWT (alias attivo), policy minima.
+KMS key: per firma JWT (alias attivo), policy minima.
 
- SES: domini/identità verificate + template email (verify, reset, magic link).
+SES: domini/identità verificate + template email (verify, reset, magic link).
 
- MongoDB Atlas: cluster serverless su AWS eu-west-1, IP allowlist/peering, utente app.
+MongoDB Atlas: cluster serverless su AWS eu-west-1, IP allowlist/peering, utente app.
 
- Redis (Elasticache serverless): per rate-limit e blacklist token.
+Redis (Elasticache serverless): per rate-limit e blacklist token.
 
 DoD: cdk deploy idempotente, output con URL API, ARNs chiavi, variabili pronte.
 
@@ -26,113 +26,113 @@ DoD: cdk deploy idempotente, output con URL API, ARNs chiavi, variabili pronte.
 
 Moduli
 
- User model (Mongo): users, refresh_tokens, email_tokens + indici.
+User model (Mongo): users, refresh_tokens, email_tokens + indici.
 
- Password hashing: Argon2id (parametri tunati).
+Password hashing: bcrypt
 
- JWT service: header+payload, firma via KMS.Sign, kid gestione/rotazione.
+JWT service: header+payload, firma via KMS.Sign, kid gestione/rotazione.
 
- JWKS endpoint: GET /.well-known/jwks.json (+ caching 15m).
+JWKS endpoint: GET /.well-known/jwks.json (+ caching 15m).
 
- Rate limiting: bucket Redis per /auth/* e /activities write.
+Rate limiting: bucket Redis per /auth/\* e /activities write.
 
- Middleware auth: validazione JWT (JWK fetch & cache), scope/ruoli.
+Middleware auth: validazione JWT (JWK fetch & cache), scope/ruoli.
 
 Endpoint
 
- POST /auth/register (+ email verify token SES)
+POST /auth/register (+ email verify token SES)
 
- GET /auth/verify-email?token=...
+GET /auth/verify-email?token=...
 
- POST /auth/login (password) + opzionale require_mfa
+POST /auth/login (password) + opzionale require_mfa
 
- POST /auth/magic-link + GET /auth/magic-link/consume
+POST /auth/magic-link + GET /auth/magic-link/consume
 
- POST /auth/refresh (rotazione refresh, jti blacklist)
+POST /auth/refresh (rotazione refresh, jti blacklist)
 
- POST /auth/logout / POST /auth/logout-all
+POST /auth/logout / POST /auth/logout-all
 
- POST /auth/forgot-password + POST /auth/reset-password
+POST /auth/forgot-password + POST /auth/reset-password
 
- POST /auth/mfa/setup|verify|disable (TOTP, secret cifrato KMS)
+POST /auth/mfa/setup|verify|disable (TOTP, secret cifrato KMS)
 
 DoD: test unit (Vitest) per ogni endpoint, test e2e minimal (supertest), log strutturati (pino).
 
 📱 Fase 3 — App Mobile (Expo) (1–2 settimane)
 
- Scaffold: Expo Router, NativeWind, React Query, Zustand, i18n, Reanimated.
+Scaffold: Expo Router, NativeWind, React Query, Zustand, i18n, Reanimated.
 
- Secure storage: expo-secure-store (refresh token, device_id).
+Secure storage: expo-secure-store (refresh token, device_id).
 
- Auth screens: Sign-up, Login, Magic link, Verify email, Reset, MFA TOTP.
+Auth screens: Sign-up, Login, Magic link, Verify email, Reset, MFA TOTP.
 
- Session handling: interceptor React Query (auto-refresh, retry, logout on 401).
+Session handling: interceptor React Query (auto-refresh, retry, logout on 401).
 
- Onboarding quiz + salvataggio profilo base.
+Onboarding quiz + salvataggio profilo base.
 
- UI Dashboard con impatto settimanale + quick actions.
+UI Dashboard con impatto settimanale + quick actions.
 
 DoD: build Android (internal) e iOS (TestFlight) + OTA canary abilitato.
 
-🧮 Fase 4 — Core dominio (API + App) 
+🧮 Fase 4 — Core dominio (API + App)
 
- Activities API: POST /activities, GET /activities?from&to, DELETE /:id
+Activities API: POST /activities, GET /activities?from&to, DELETE /:id
 
- Motore impatto: fattori emissione versionati (factors_v1.json), calcolo server-side.
+Motore impatto: fattori emissione versionati (factors_v1.json), calcolo server-side.
 
- Aggregazioni: impacts per week/month; job EventBridge nightly.
+Aggregazioni: impacts per week/month; job EventBridge nightly.
 
- Suggerimenti AI (v0): rule-based (in base a profilo/attività recenti).
+Suggerimenti AI (v0): rule-based (in base a profilo/attività recenti).
 
- Gamification: punti, badge base; endpoint /challenges (lista/join/progress).
+Gamification: punti, badge base; endpoint /challenges (lista/join/progress).
 
- App UI: tracking rapido (icone/tap), consigli a card, progress bar sfide.
+App UI: tracking rapido (icone/tap), consigli a card, progress bar sfide.
 
 DoD: query summary (GET /impact/summary?range=week), performance p95 < 300ms su GET cacheable.
 
-🛍️ Fase 5 — Reward & Partner 
+🛍️ Fase 5 — Reward & Partner
 
- Rewards API: GET /rewards, POST /rewards/:id/redeem (stock, idempotenza).
+Rewards API: GET /rewards, POST /rewards/:id/redeem (stock, idempotenza).
 
- Coupon engine: mock issuer + audit redemption.
+Coupon engine: mock issuer + audit redemption.
 
- App UI: store premi (lista/dettaglio/riscatto).
+App UI: store premi (lista/dettaglio/riscatto).
 
 DoD: redemption transazionale (sessione Mongo), doppio click safe.
 
 🔎 Fase 6 — Observability, Sicurezza, Qualità (3–5 gg)
 
- Sentry mobile + backend; release health.
+Sentry mobile + backend; release health.
 
- CloudWatch dashboards: invocazioni, errori, latenze; allarmi su 5xx e throttling.
+CloudWatch dashboards: invocazioni, errori, latenze; allarmi su 5xx e throttling.
 
- WAF regole OWASP core + bot control su /auth/*.
+WAF regole OWASP core + bot control su /auth/\*.
 
- Privacy/GDPR: export/delete account endpoint admin; data retention log 30–90 gg.
+Privacy/GDPR: export/delete account endpoint admin; data retention log 30–90 gg.
 
- Pen test checklist: brute force, token reuse, replay, CORS, header sicurezza (HSTS, CSP API).
+Pen test checklist: brute force, token reuse, replay, CORS, header sicurezza (HSTS, CSP API).
 
 DoD: checklist sicurezza firmata, run zap/burp baseline su staging.
 
-📈 Fase 7 — Analytics & Growth 
+📈 Fase 7 — Analytics & Growth
 
- Eventi prodotto (PostHog/Amplitude): signup, login, activity_add, challenge_join, reward_redeem.
+Eventi prodotto (PostHog/Amplitude): signup, login, activity_add, challenge_join, reward_redeem.
 
- Funnel: activation (prima attività entro 24h), D1/D7 retention dashboard.
+Funnel: activation (prima attività entro 24h), D1/D7 retention dashboard.
 
- Feature flags: suggerimenti AI on/off, fattori emissione v2.
+Feature flags: suggerimenti AI on/off, fattori emissione v2.
 
 DoD: eventi visibili in dashboard + segmentazione base.
 
-🚀 Fase 8 — Release & Operatività 
+🚀 Fase 8 — Release & Operatività
 
- CI/CD: GitHub Actions (lint/test/build), cdk synth/deploy, promozione env (dev→staging→prod).
+CI/CD: GitHub Actions (lint/test/build), cdk synth/deploy, promozione env (dev→staging→prod).
 
- Versionamento API: v1 prefix + changelog; contratti OpenAPI generati.
+Versionamento API: v1 prefix + changelog; contratti OpenAPI generati.
 
- Store readiness: privacy policy, termini, screenshot, icone, descrizioni.
+Store readiness: privacy policy, termini, screenshot, icone, descrizioni.
 
- Runbook: incident response, rotazione KMS, revoke di massa, key leak procedure.
+Runbook: incident response, rotazione KMS, revoke di massa, key leak procedure.
 
 DoD: beta pubblica limitata + canale feedback in-app.
 
